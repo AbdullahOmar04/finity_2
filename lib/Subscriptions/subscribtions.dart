@@ -1,5 +1,3 @@
-// lib/view_subscriptions_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:finity_2/utlis/logo_mapper.dart';
@@ -30,7 +28,9 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
       builder:
           (ctx) => AlertDialog(
             title: const Text('Cancel subscription?'),
-            content: Text('Cancel ${sub['merchant']}?'),
+            content: Text(
+              'Are you sure you want to cancel ${sub['merchant']}?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -46,22 +46,80 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
     if (ok != true) return;
 
     final userDoc = FirebaseFirestore.instance.doc('users/$_uid');
-    try {
-      await userDoc.update({
-        'subscriptions': FieldValue.arrayRemove([sub]),
-      });
-      final updated = Map<String, dynamic>.from(sub)..['status'] = 'canceled';
-      await userDoc.update({
-        'subscriptions': FieldValue.arrayUnion([updated]),
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Canceled ${sub['merchant']}')));
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
+    await userDoc.update({
+      'subscriptions': FieldValue.arrayRemove([sub]),
+    });
+    final updated = Map<String, dynamic>.from(sub)..['status'] = 'canceled';
+    await userDoc.update({
+      'subscriptions': FieldValue.arrayUnion([updated]),
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Canceled ${sub['merchant']}')));
+  }
+
+  Future<void> _resubscribeSubscription(Map<String, dynamic> sub) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Resubscribe?'),
+            content: Text('Reactivate ${sub['merchant']}?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Yes'),
+              ),
+            ],
+          ),
+    );
+    if (ok != true) return;
+
+    final userDoc = FirebaseFirestore.instance.doc('users/$_uid');
+    await userDoc.update({
+      'subscriptions': FieldValue.arrayRemove([sub]),
+    });
+    final updated = Map<String, dynamic>.from(sub)..['status'] = 'active';
+    await userDoc.update({
+      'subscriptions': FieldValue.arrayUnion([updated]),
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Resubscribed ${sub['merchant']}')));
+  }
+
+  Future<void> _removeSubscription(Map<String, dynamic> sub) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Remove subscription?'),
+            content: Text('Permanently remove ${sub['merchant']}?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Yes'),
+              ),
+            ],
+          ),
+    );
+    if (ok != true) return;
+
+    final userDoc = FirebaseFirestore.instance.doc('users/$_uid');
+    await userDoc.update({
+      'subscriptions': FieldValue.arrayRemove([sub]),
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Removed ${sub['merchant']}')));
   }
 
   void _editSubscription(Map<String, dynamic> sub) {
@@ -90,7 +148,7 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
         centerTitle: true,
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadiusDirectional.vertical(
+            borderRadius: const BorderRadius.vertical(
               bottom: Radius.circular(15),
             ),
             gradient: LinearGradient(
@@ -129,70 +187,133 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
                     ?.cast<Map<String, dynamic>>() ??
                 [];
 
-            return _buildList(
-              items: subs,
-              itemBuilder: (i, sub) {
+            if (subs.isEmpty) {
+              return Center(
+                child: TextButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Subscription'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AddSubscriptionPage(),
+                        ),
+                      ),
+                ),
+              );
+            }
+
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: subs.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (ctx, i) {
+                if (i == subs.length) {
+                  return SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(
+                        Icons.add_circle_outlined,
+                        color: Colors.white,
+                      ),
+                      label: const Text(
+                        'Add Subscription',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AddSubscriptionPage(),
+                            ),
+                          ),
+                    ),
+                  );
+                }
+
+                final sub = subs[i];
                 final merchant = sub['merchant'] as String? ?? '';
-                final amount = sub['amount']?.toString() ?? '';
+                final amount =
+                    (sub['amount'] as num?)?.toStringAsFixed(2) ?? '';
                 final cycle = sub['cycle'] as String? ?? '';
-                final next = (sub['nextBillingDate'] as Timestamp?)?.toDate();
                 final status = sub['status'] as String? ?? 'active';
+                final nextDate =
+                    (sub['nextBillingDate'] as Timestamp?)?.toDate();
                 final cardId = sub['cardId'] as String?;
                 final card = cards.firstWhere(
                   (c) => c['cardId'] == cardId,
-                  orElse: () => <String, dynamic>{},
+                  orElse: () => {},
                 );
                 final last4 = card['last4'] as String? ?? '----';
 
-                final title = merchant;
-                final trailing = '\$$amount / $cycle';
                 final subtitle =
                     status == 'active'
-                        ? '•••• $last4 • Next: ${next != null ? DateFormat.yMMMd().format(next) : '—'}'
-                        : '•••• $last4 • Status: $status';
-                final logo = logoForMerchant(merchant);
+                        ? '•••• $last4  •  Next: ${nextDate != null ? DateFormat.yMMMd().format(nextDate) : '—'}'
+                        : '•••• $last4  •  Status: canceled';
+
+                final actions =
+                    status == 'active'
+                        ? [
+                          SlidableAction(
+                            onPressed: (_) => _editSubscription(sub),
+                            backgroundColor:
+                                Theme.of(context).colorScheme.secondary,
+                            foregroundColor: Colors.white,
+                            icon: Icons.edit,
+                            label: 'Edit',
+                          ),
+                          SlidableAction(
+                            onPressed: (_) => _cancelSubscription(sub),
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            icon: Icons.cancel,
+                            label: 'Cancel',
+                          ),
+                        ]
+                        : [
+                          SlidableAction(
+                            onPressed: (_) => _resubscribeSubscription(sub),
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            icon: Icons.refresh,
+                            label: 'Resubscribe',
+                          ),
+                          SlidableAction(
+                            onPressed: (_) => _removeSubscription(sub),
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            icon: Icons.delete,
+                            label: 'Remove',
+                          ),
+                        ];
 
                 return Slidable(
-                  key: ValueKey(sub['merchant'] + i.toString()),
+                  key: ValueKey(sub['subId']),
                   endActionPane: ActionPane(
                     motion: const DrawerMotion(),
-                    extentRatio: 0.5,
-                    children: [
-                      SlidableAction(
-                        onPressed: (_) => _editSubscription(sub),
-                        backgroundColor:
-                            Theme.of(context).colorScheme.secondary,
-                        foregroundColor: Colors.white,
-                        icon: Icons.edit,
-                        label: 'Edit',
-                      ),
-                      SlidableAction(
-                        onPressed: (_) => _cancelSubscription(sub),
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        icon: Icons.cancel,
-                        label: 'Cancel',
-                      ),
-                    ],
+                    children: actions,
                   ),
                   child: _buildCard(
-                    title: title,
+                    merchant: merchant,
                     subtitle: subtitle,
-                    trailing: trailing,
-                    logoAsset: logo,
+                    amount: '\$$amount / $cycle',
+                    logoAsset: logoForMerchant(merchant),
                   ),
                 );
               },
-              onAdd:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AddSubscriptionPage(),
-                    ),
-                  ),
-              emptyMessage: 'No subscriptions yet.\nAdd one to get started!',
-              addIcon: Icons.subscriptions,
-              addLabel: 'Add Subscription',
             );
           },
         ),
@@ -200,128 +321,45 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
     );
   }
 
-  Widget _buildList({
-    required List<Map<String, dynamic>> items,
-    required Widget Function(int, Map<String, dynamic>) itemBuilder,
-    required VoidCallback onAdd,
-    required String emptyMessage,
-    required IconData addIcon,
-    required String addLabel,
-  }) {
-    return Column(
-      children: [
-        if (items.isEmpty)
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    addIcon,
-                    size: 64,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.tertiary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    emptyMessage,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (ctx, i) => itemBuilder(i, items[i]),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: ElevatedButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add_circle),
-            label: const Text('Add Subscriptions'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              minimumSize: const Size.fromHeight(56),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 3,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildCard({
-    required String title,
+    required String merchant,
     required String subtitle,
-    required String trailing,
+    required String amount,
     required String logoAsset,
   }) {
     final theme = Theme.of(context);
     return Card(
-      elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.onPrimary,
-              theme.colorScheme.surface.withOpacity(0.1),
-            ],
+      elevation: 4,
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Image.asset(logoAsset, width: 24, height: 24),
+        ),
+        title: Text(
+          merchant,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.tertiary,
           ),
         ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Image.asset(logoAsset, width: 24, height: 24),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey)),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
           ),
-          title: Text(
-            title,
+          child: Text(
+            amount,
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: theme.colorScheme.tertiary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            subtitle,
-            style: TextStyle(color: Colors.grey[600]),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              trailing,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
+              color: theme.colorScheme.primary,
             ),
           ),
         ),

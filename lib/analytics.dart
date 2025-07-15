@@ -2,6 +2,7 @@
 
 // ignore_for_file: deprecated_member_use
 
+import 'package:finity_2/utlis/logo_mapper.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -261,6 +262,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           (ctx) => StatefulBuilder(
             builder: (ctx, setState) {
               return AlertDialog(
+                scrollable: true,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -690,7 +692,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           unselectedLabelColor: Theme.of(context).colorScheme.onPrimary,
           tabs: [
             Tab(text: 'Income', icon: Icon(Icons.attach_money)),
-            Tab(text: 'Fixed', icon: Icon(Icons.home)),
+            Tab(text: 'Recurring', icon: Icon(Icons.home)),
             Tab(text: 'Variable', icon: Icon(Icons.shopping_cart)),
             Tab(text: 'Summary', icon: Icon(Icons.analytics)),
           ],
@@ -727,7 +729,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 (i, item) => _buildSlidableCard(
                   title: item.name,
                   amount: '${item.amount.toStringAsFixed(2)} JD',
-                  icon: Icons.home,
+                  icon: iconForFixedExpense(item.name),
                   onEdit: () => _editFixedExpense(i),
                   onDelete: () => _removeFixedExpense(i),
                 ),
@@ -745,7 +747,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                   title: item.category,
                   amount: '${item.amount.toStringAsFixed(2)} JD',
                   subtitle: DateFormat.yMMMd().format(item.date),
-                  icon: Icons.shopping_cart,
+                  icon: iconForVariableExpense(item.category),
                   onEdit: () => _editVariableExpense(i),
                   onDelete: () => _removeVariableExpense(i),
                 ),

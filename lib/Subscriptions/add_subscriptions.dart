@@ -31,17 +31,20 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
   @override
   void initState() {
     super.initState();
-    // initialize controllers—prefill if editing
+
+    // Prefill if editing:
     final e = widget.existing;
     _merchantCtl = TextEditingController(text: e?['merchant'] as String?);
-    _logoCtl = TextEditingController(text: e?['logoUrl'] as String?);
-    _amountCtl = TextEditingController(
+    _logoCtl     = TextEditingController(text: e?['logoUrl']   as String?);
+    _amountCtl   = TextEditingController(
       text: e != null ? (e['amount']?.toString() ?? '') : '',
     );
-    _selectedCycle = e != null ? (e['cycle'] as String?)?.capitalize() : null;
-    _selectedCardId = e?['cardId'] as String?;
-    final ts = e?['nextBillingDate'] as Timestamp?;
-    _nextDate = ts?.toDate() ?? DateTime.now();
+    if (e != null) {
+      _selectedCycle  = (e['cycle'] as String?)?.capitalize();
+      _selectedCardId = e['cardId'] as String?;
+      final ts        = e['nextBillingDate'] as Timestamp?;
+      _nextDate       = ts?.toDate() ?? DateTime.now();
+    }
   }
 
   @override
@@ -54,10 +57,10 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
 
   Future<List<Map<String, dynamic>>> _loadCards() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final doc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final data = doc.data() ?? {};
-    return (data['cards'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+    return (data['cards'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
         [];
   }
 
@@ -69,9 +72,7 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
       firstDate: now,
       lastDate: DateTime(now.year + 2),
     );
-    if (picked != null) {
-      setState(() => _nextDate = picked);
-    }
+    if (picked != null) setState(() => _nextDate = picked);
   }
 
   Future<void> _submit() async {
@@ -86,15 +87,16 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
     setState(() => _loading = true);
 
     final merchant = _merchantCtl.text.trim();
-    final logoUrl = _logoCtl.text.trim().isEmpty ? null : _logoCtl.text.trim();
-    final amount = double.parse(_amountCtl.text.trim());
-    final cycle = _selectedCycle!.toLowerCase();
-    final nextTs = Timestamp.fromDate(_nextDate!);
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final subId =
-        widget.existing != null
-            ? widget.existing!['subId'] as String
-            : DateTime.now().millisecondsSinceEpoch.toString();
+    final logoUrl  = _logoCtl.text.trim().isEmpty ? null : _logoCtl.text.trim();
+    final amount   = double.parse(_amountCtl.text.trim());
+    final cycle    = _selectedCycle!.toLowerCase();
+    final nextTs   = Timestamp.fromDate(_nextDate!);
+    final uid      = FirebaseAuth.instance.currentUser!.uid;
+
+    // Keep same subId if editing, else generate new:
+    final subId = widget.existing != null
+        ? widget.existing!['subId'] as String
+        : DateTime.now().millisecondsSinceEpoch.toString();
 
     final newSub = <String, dynamic>{
       'subId': subId,
@@ -103,20 +105,21 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
       'amount': amount,
       'cycle': cycle,
       'nextBillingDate': nextTs,
-      'status': widget.existing != null ? widget.existing!['status'] : 'active',
+      'status': widget.existing != null
+          ? widget.existing!['status']
+          : 'active',
       'cardId': _selectedCardId,
     };
 
     final userDoc = FirebaseFirestore.instance.doc('users/$uid');
-
     try {
       if (widget.existing == null) {
-        // adding new
+        // add new
         await userDoc.update({
           'subscriptions': FieldValue.arrayUnion([newSub]),
         });
       } else {
-        // editing: remove old then add updated
+        // edit: remove old then add updated
         await userDoc.update({
           'subscriptions': FieldValue.arrayRemove([widget.existing]),
         });
@@ -126,21 +129,20 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
       }
       Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to save: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   InputDecoration _deco(String label, {Widget? suffix}) => InputDecoration(
-    labelText: label,
-    suffixIcon: suffix,
-    filled: true,
-    fillColor: Colors.grey.shade100,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-  );
+        labelText: label,
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: Colors.grey.shade100,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -151,12 +153,8 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
         centerTitle: true,
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadiusDirectional.vertical(
-              bottom: Radius.circular(15),
-            ),
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
               colors: [
                 Theme.of(context).colorScheme.primary,
                 Theme.of(context).colorScheme.secondary,
@@ -176,21 +174,18 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
             final cards = snap.data!;
             return SingleChildScrollView(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
               ),
               child: Form(
                 key: _formKey,
                 child: Column(
                   children: [
-                    // Merchant
+                    // Merchant Name
                     TextFormField(
                       controller: _merchantCtl,
                       decoration: _deco('Merchant Name'),
-                      validator:
-                          (v) =>
-                              (v == null || v.isEmpty)
-                                  ? 'Enter merchant'
-                                  : null,
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Enter merchant' : null,
                     ),
                     const SizedBox(height: 12),
 
@@ -198,9 +193,7 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
                     TextFormField(
                       controller: _amountCtl,
                       decoration: _deco('Amount'),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       validator: (v) {
                         if (v == null || v.isEmpty) return 'Enter amount';
                         final n = double.tryParse(v);
@@ -210,52 +203,41 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Cycle
+                    // Billing Cycle
                     DropdownButtonFormField<String>(
                       value: _selectedCycle,
                       decoration: _deco('Billing Cycle'),
-                      items:
-                          _cycles
-                              .map(
-                                (c) =>
-                                    DropdownMenuItem(value: c, child: Text(c)),
-                              )
-                              .toList(),
+                      items: _cycles
+                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                          .toList(),
                       onChanged: (v) => setState(() => _selectedCycle = v),
-                      validator:
-                          (v) => v == null ? 'Select billing cycle' : null,
+                      validator: (v) => v == null ? 'Select billing cycle' : null,
                     ),
                     const SizedBox(height: 12),
 
-                    // Card picker
+                    // Paying Card
                     DropdownButtonFormField<String>(
                       value: _selectedCardId,
                       decoration: _deco('Paying Card'),
-                      items:
-                          cards
-                              .map(
-                                (card) => DropdownMenuItem(
-                                  value: card['cardId'] as String,
-                                  child: Text(
-                                    '${card['issuer']} •••• ${card['last4']}',
-                                  ),
-                                ),
-                              )
-                              .toList(),
+                      items: cards
+                          .map((card) => DropdownMenuItem(
+                                value: card['cardId'] as String,
+                                child: Text(
+                                    '${card['issuer']} •••• ${card['last4']}'),
+                              ))
+                          .toList(),
                       onChanged: (v) => setState(() => _selectedCardId = v),
-                      validator:
-                          (v) => v == null ? 'Select a payment card' : null,
+                      validator: (v) => v == null ? 'Select a payment card' : null,
                     ),
                     const SizedBox(height: 12),
 
-                    // Next date
+                    // Next Billing Date
                     TextFormField(
                       readOnly: true,
                       controller: TextEditingController(
-                        text:
-                            _nextDate != null
-                                ? DateFormat.yMMMd().format(_nextDate!)
-                                : '',
+                        text: _nextDate == null
+                            ? ''
+                            : DateFormat.yMMMd().format(_nextDate!),
                       ),
                       decoration: _deco(
                         'Next Billing Date',
@@ -264,36 +246,29 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
                           onPressed: _pickDate,
                         ),
                       ),
-                      validator:
-                          (_) => _nextDate == null ? 'Pick a date' : null,
+                      validator: (_) =>
+                          _nextDate == null ? 'Pick a date' : null,
                     ),
                     const SizedBox(height: 24),
 
-                    // Save button
+                    // Save
                     _loading
                         ? const CircularProgressIndicator()
                         : SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => _submit(),
-                            icon: const Icon(Icons.add_circle),
-                            label:
-                                isEditing
-                                    ? Text('Save Edits')
-                                    : Text('Save Subscriptions'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                              foregroundColor:
-                                  Theme.of(context).colorScheme.onPrimary,
-                              minimumSize: const Size.fromHeight(56),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _submit,
+                              icon: const Icon(Icons.save),
+                              label: Text(isEditing
+                                  ? 'Save Changes'
+                                  : 'Save Subscription'),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
                               ),
-                              elevation: 3,
                             ),
                           ),
-                        ),
                   ],
                 ),
               ),
@@ -305,8 +280,8 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
   }
 }
 
-/// Helper to capitalize dropdown values back to display form.
-extension on String {
+/// Simple extension to re-capitalize Firestore’s lowercase cycle string.
+extension StringCapital on String {
   String capitalize() =>
       substring(0, 1).toUpperCase() + substring(1).toLowerCase();
 }

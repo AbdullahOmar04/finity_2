@@ -1,10 +1,12 @@
+// lib/QR/qr_sending.dart
+
 import 'dart:convert';
-import 'package:finity_2/QR/qr_scanner.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'qr_scanner.dart'; // <-- fixed import
 
 class QrSending extends StatefulWidget {
   const QrSending({Key? key}) : super(key: key);
@@ -31,25 +33,29 @@ class _QrSendingState extends State<QrSending> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
-    final totalAmount = double.parse(_totalAmountCtl.text.trim());
-    final peopleCount = int.parse(_peopleCountCtl.text.trim());
+    final totalAmount     = double.parse(_totalAmountCtl.text.trim());
+    final peopleCount     = int.parse(_peopleCountCtl.text.trim());
     final amountPerPerson = totalAmount / peopleCount;
-    final totalCents = (totalAmount * 100).toInt();
-    final perPersonCents = (amountPerPerson * 100).toInt();
-    final businessUid = FirebaseAuth.instance.currentUser!.uid;
+    final totalCents      = (totalAmount * 100).toInt();
+    final perPersonCents  = (amountPerPerson * 100).toInt();
+    final businessUid     = FirebaseAuth.instance.currentUser!.uid;
 
     try {
-      // Create bill split document
-      final doc = await FirebaseFirestore.instance.collection('bill_splits').add({
+      final doc = await FirebaseFirestore.instance
+          .collection('bill_splits')
+          .add({
         'businessUid': businessUid,
         'totalAmountCents': totalCents,
         'peopleCount': peopleCount,
         'amountPerPersonCents': perPersonCents,
         'paidCount': 0,
-        'paidBy': [], // Array of UIDs who have paid
-        'status': 'active', // active, completed, expired
+        'paidBy': <String>[],
+        'status': 'active',
         'createdAt': FieldValue.serverTimestamp(),
-        'expiresAt': FieldValue.serverTimestamp(), // TODO: Set expiration time
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(hours: 24)),
+        ),
+        'lastPaymentAt': null,
       });
 
       setState(() {
@@ -73,7 +79,7 @@ class _QrSendingState extends State<QrSending> {
       'totalAmount': _totalAmountCtl.text,
       'peopleCount': _peopleCountCtl.text,
     });
-    
+
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -83,7 +89,9 @@ class _QrSendingState extends State<QrSending> {
           qrData: qrData,
           totalAmount: _totalAmountCtl.text,
           peopleCount: _peopleCountCtl.text,
-          amountPerPerson: (double.parse(_totalAmountCtl.text) / int.parse(_peopleCountCtl.text)).toStringAsFixed(2),
+          amountPerPerson: (double.parse(_totalAmountCtl.text) /
+                  int.parse(_peopleCountCtl.text))
+              .toStringAsFixed(2),
           onDone: () {
             Navigator.pop(context);
             _totalAmountCtl.clear();
@@ -99,24 +107,36 @@ class _QrSendingState extends State<QrSending> {
     );
   }
 
-  void _showBillStatus() {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        child: _BillStatusDialog(billId: _billId!),
+void _showBillStatus() {
+  if (_billId == null) return;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minWidth: 280,
+          maxWidth: 360,
+        ),
+        child: _EnhancedBillStatusDialog(billId: _billId!),
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Split Bill - POS',
+          'Split Bill – POS',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onPrimary,
+            color: theme.colorScheme.onPrimary,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -124,15 +144,11 @@ class _QrSendingState extends State<QrSending> {
         elevation: 0,
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadiusDirectional.vertical(
-              bottom: Radius.circular(15),
-            ),
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
               colors: [
-                Theme.of(context).colorScheme.primary,
-                Theme.of(context).colorScheme.secondary,
+                theme.colorScheme.primary,
+                theme.colorScheme.secondary,
               ],
             ),
           ),
@@ -141,7 +157,7 @@ class _QrSendingState extends State<QrSending> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const QrScannerPage()),
+          MaterialPageRoute(builder: (_) => const EnhancedQrScanner()),
         ),
         icon: const Icon(Icons.qr_code_scanner),
         label: const Text('Scan QR'),
@@ -149,11 +165,9 @@ class _QrSendingState extends State<QrSending> {
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+              theme.colorScheme.primary.withOpacity(0.1),
+              theme.colorScheme.secondary.withOpacity(0.1),
             ],
           ),
         ),
@@ -166,45 +180,32 @@ class _QrSendingState extends State<QrSending> {
                 // Header
                 Row(
                   children: [
-                    Icon(
-                      Icons.point_of_sale,
-                      size: 32,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                    Icon(Icons.point_of_sale, size: 32, color: theme.colorScheme.primary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Bill Splitting',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                          Text(
-                            'Split customer bills instantly',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                          Text('Bill Splitting',
+                              style: theme.textTheme.headlineMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                          Text('Split customer bills instantly',
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 32),
-                
+
                 // Form Card
                 Card(
                   elevation: 0,
-                  color: Theme.of(context).colorScheme.surface,
+                  color: theme.colorScheme.surface,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-                    ),
+                    side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -213,76 +214,69 @@ class _QrSendingState extends State<QrSending> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Transaction Details',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          Text('Transaction Details',
+                              style: theme.textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 20),
-                          
-                          // Total Amount Field
+
+                          // Total Amount
                           TextFormField(
                             controller: _totalAmountCtl,
                             decoration: InputDecoration(
                               labelText: 'Total Bill Amount (JD)',
                               hintText: 'e.g., 25.00',
-                              prefixIcon: Icon(
-                                Icons.receipt_long,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
+                              prefixIcon: Icon(Icons.receipt_long,
+                                  color: theme.colorScheme.primary),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                                  borderRadius: BorderRadius.circular(12)),
                               filled: true,
-                              fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                              fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                             ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType:
+                                const TextInputType.numberWithOptions(decimal: true),
                             validator: (v) {
-                              if (v == null || v.isEmpty) return 'Enter total amount';
+                              if (v == null || v.isEmpty) return 'Enter total bill';
                               final n = double.tryParse(v);
-                              if (n == null || n <= 0) return 'Must be greater than 0';
+                              if (n == null || n <= 0) return 'Must be > 0';
                               return null;
                             },
-                            onChanged: (v) => setState(() {}), // Trigger rebuild for calculation
+                            onChanged: (_) => setState(() {}),
                           ),
-                          
-                          const SizedBox(height: 20),
-                          
-                          // People Count Field
+                          const SizedBox(height: 16),
+
+                          // Number of People
                           TextFormField(
                             controller: _peopleCountCtl,
                             decoration: InputDecoration(
-                              labelText: 'Number of Customers',
+                              labelText: 'Number of People',
                               hintText: 'e.g., 3',
-                              prefixIcon: Icon(
-                                Icons.group,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
+                              prefixIcon: Icon(Icons.group,
+                                  color: theme.colorScheme.primary),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                                  borderRadius: BorderRadius.circular(12)),
                               filled: true,
-                              fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                              fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                             ),
                             keyboardType: TextInputType.number,
                             validator: (v) {
-                              if (v == null || v.isEmpty) return 'Enter number of customers';
+                              if (v == null || v.isEmpty) return 'Enter number of people';
                               final n = int.tryParse(v);
-                              if (n == null || n < 2) return 'Must be at least 2 people';
+                              if (n == null || n < 2) return 'At least 2 people';
                               return null;
                             },
-                            onChanged: (v) => setState(() {}), // Trigger rebuild for calculation
+                            onChanged: (_) => setState(() {}),
                           ),
-                          
                           const SizedBox(height: 24),
-                          
-                          // Split calculation display
-                          if (_totalAmountCtl.text.isNotEmpty && _peopleCountCtl.text.isNotEmpty)
+
+                          // Live Split Preview
+                          if (_totalAmountCtl.text.isNotEmpty &&
+                              _peopleCountCtl.text.isNotEmpty &&
+                              double.tryParse(_totalAmountCtl.text) != null &&
+                              int.tryParse(_peopleCountCtl.text) != null)
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primaryContainer,
+                                color: theme.colorScheme.primaryContainer,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Column(
@@ -290,44 +284,35 @@ class _QrSendingState extends State<QrSending> {
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
+                                      Text('Each customer pays:',
+                                          style: theme.textTheme.titleMedium),
                                       Text(
-                                        'Each customer pays:',
-                                        style: Theme.of(context).textTheme.titleMedium,
-                                      ),
-                                      Text(
-                                        '${((double.tryParse(_totalAmountCtl.text) ?? 0) / (int.tryParse(_peopleCountCtl.text) ?? 1)).toStringAsFixed(2)} JD',
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: Theme.of(context).colorScheme.primary,
-                                          fontSize: 18,
-                                        ),
-                                      ),
+                                          '${(double.parse(_totalAmountCtl.text) / int.parse(_peopleCountCtl.text)).toStringAsFixed(2)} JD',
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: theme.colorScheme.primary,
+                                                  fontSize: 18)),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  Divider(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
+                                  Divider(color: theme.colorScheme.outline.withOpacity(0.3)),
                                   const SizedBox(height: 8),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        'Business receives:',
-                                        style: Theme.of(context).textTheme.bodyMedium,
-                                      ),
-                                      Text(
-                                        '${_totalAmountCtl.text} JD',
-                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
+                                      Text('Business receives:',
+                                          style: theme.textTheme.bodyMedium),
+                                      Text('${_totalAmountCtl.text} JD',
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(fontWeight: FontWeight.bold)),
                                     ],
                                   ),
                                 ],
                               ),
                             ),
-                          
                           const SizedBox(height: 32),
-                          
+
                           // Generate QR Button
                           SizedBox(
                             width: double.infinity,
@@ -338,21 +323,20 @@ class _QrSendingState extends State<QrSending> {
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child:
+                                          CircularProgressIndicator(strokeWidth: 2),
                                     )
-                                  : Icon(
-                                      Icons.qr_code_2,
-                                      color: Theme.of(context).colorScheme.onPrimary,
-                                    ),
+                                  : Icon(Icons.qr_code_2,
+                                      color: theme.colorScheme.onPrimary),
                               label: Text(
                                 _loading ? 'Creating...' : 'Generate Split QR',
                                 style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onPrimary,
+                                  color: theme.colorScheme.onPrimary,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.primary,
+                                backgroundColor: theme.colorScheme.primary,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -394,10 +378,11 @@ class _QrOverlayContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -415,14 +400,14 @@ class _QrOverlayContent extends StatelessWidget {
             children: [
               Icon(
                 Icons.point_of_sale,
-                color: Theme.of(context).colorScheme.primary,
+                color: theme.colorScheme.primary,
                 size: 28,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Bill Split QR Ready',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -431,14 +416,14 @@ class _QrOverlayContent extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close),
                 style: IconButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+                  backgroundColor: theme.colorScheme.surfaceVariant,
                 ),
               ),
             ],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // QR Code
           Container(
             padding: const EdgeInsets.all(16),
@@ -446,7 +431,7 @@ class _QrOverlayContent extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                color: theme.colorScheme.outline.withOpacity(0.3),
               ),
             ),
             child: QrImageView(
@@ -456,14 +441,14 @@ class _QrOverlayContent extends StatelessWidget {
               backgroundColor: Colors.white,
             ),
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Bill details
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
+              color: theme.colorScheme.primary,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -474,14 +459,14 @@ class _QrOverlayContent extends StatelessWidget {
                     Text(
                       'Total Bill:',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onPrimary,
+                        color: theme.colorScheme.onPrimary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     Text(
                       '$totalAmount JD',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onPrimary,
+                        color: theme.colorScheme.onPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -495,14 +480,14 @@ class _QrOverlayContent extends StatelessWidget {
                     Text(
                       'Split $peopleCount ways:',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onPrimary,
+                        color: theme.colorScheme.onPrimary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     Text(
                       '$amountPerPerson JD each',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onPrimary,
+                        color: theme.colorScheme.onPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -512,27 +497,27 @@ class _QrOverlayContent extends StatelessWidget {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Instructions
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: theme.colorScheme.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               'Show this QR code to your customers. Each person scans to pay their share ($amountPerPerson JD)',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.center,
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Actions
           Row(
             children: [
@@ -559,100 +544,232 @@ class _QrOverlayContent extends StatelessWidget {
   }
 }
 
-/// Bill status tracking dialog
-class _BillStatusDialog extends StatelessWidget {
+/// Enhanced Bill status tracking dialog with real-time updates - COMPLETELY REDESIGNED
+class _EnhancedBillStatusDialog extends StatefulWidget {
   final String billId;
+  const _EnhancedBillStatusDialog({required this.billId});
+  @override
+  _EnhancedBillStatusDialogState createState() => _EnhancedBillStatusDialogState();
+}
 
-  const _BillStatusDialog({required this.billId});
+class _EnhancedBillStatusDialogState extends State<_EnhancedBillStatusDialog> {
+  late final Stream<DocumentSnapshot> _billStream;
+  int _prevPaid = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _billStream = FirebaseFirestore.instance
+        .collection('bill_splits')
+        .doc(widget.billId)
+        .snapshots();
+  }
+
+  void _playHaptic() => HapticFeedback.lightImpact();
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('bill_splits')
-          .doc(billId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+      stream: _billStream,
+      builder: (ctx, snap) {
+        if (!snap.hasData) {
+          return Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(cs.primary)),
+                const SizedBox(height: 16),
+                Text('Loading payment status…', style: Theme.of(context).textTheme.bodyMedium),
+              ]),
+            ),
+          );
         }
 
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        final paidCount = data['paidCount'] ?? 0;
-        final totalPeople = data['peopleCount'] ?? 1;
-        final amountPerPerson = (data['amountPerPersonCents'] ?? 0) / 100.0;
-        final totalCollected = paidCount * amountPerPerson;
+        final data = snap.data!.data()! as Map<String, dynamic>;
+        final paid = data['paidCount']   as int?    ?? 0;
+        final people = data['peopleCount'] as int?   ?? 1;
+        final perCents = data['amountPerPersonCents'] as int? ?? 0;
+        final totalCents = data['totalAmountCents'] as int? ?? 0;
+        final collected = paid * (perCents / 100);
+        final total = totalCents / 100;
+        final remaining = total - collected;
+        final done = data['status'] == 'completed';
+        final lastTs = data['lastPaymentAt'] as Timestamp?;
+        final lastDate = lastTs?.toDate();
 
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Payment Status',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+        // play haptic on new payment
+        if (paid > _prevPaid) {
+          _playHaptic();
+          _prevPaid = paid;
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: done ? cs.primaryContainer : cs.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(done ? Icons.check_circle : Icons.payment,
+                      color: done ? cs.primary : cs.primary, size: 24),
                 ),
-              ),
-              const SizedBox(height: 20),
-              
-              // Progress indicator
-              LinearProgressIndicator(
-                value: paidCount / totalPeople,
-                backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  Theme.of(context).colorScheme.primary,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    done ? 'Payment Complete!' : 'Payment Status',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // progress bar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Progress', style: Theme.of(context).textTheme.titleMedium),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$paid / $people paid',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: people > 0 ? paid / people : 0,
+                minHeight: 6,
+                backgroundColor: cs.outline.withOpacity(0.2),
+                valueColor: AlwaysStoppedAnimation(done ? cs.primary : cs.primary),
               ),
-              
+            ),
+
+            const SizedBox(height: 20),
+
+            // details card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cs.secondaryContainer.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(children: [
+                _detailRow('Total Bill:', '${total.toStringAsFixed(2)} JD', cs.onSurface),
+                const SizedBox(height: 8),
+                _detailRow('Per Person:', '${(perCents/100).toStringAsFixed(2)} JD', cs.onSurface),
+                const SizedBox(height: 8),
+                _detailRow('Collected:', '${collected.toStringAsFixed(2)} JD', cs.primary),
+                const SizedBox(height: 8),
+                _detailRow('Remaining:', '${remaining.toStringAsFixed(2)} JD', cs.error),
+              ]),
+            ),
+
+            if (lastDate != null) ...[
+              const SizedBox(height: 12),
+              Text('Last payment: ${_formatTime(lastDate)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ],
+
+            if (done) ...[
               const SizedBox(height: 16),
-              
-              // Status info
               Container(
-                padding: const EdgeInsets.all(16),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  color: cs.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: cs.primary.withOpacity(0.3)),
                 ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Paid:'),
-                        Text('$paidCount / $totalPeople customers'),
-                      ],
+                child: Row(children: [
+                  Icon(Icons.celebration, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'All $total JD collected! 🎉',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.primary,
+                          ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Collected:'),
-                        Text('${totalCollected.toStringAsFixed(2)} JD'),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Remaining:'),
-                        Text('${((totalPeople - paidCount) * amountPerPerson).toStringAsFixed(2)} JD'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 20),
-              
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
+                  ),
+                ]),
               ),
             ],
-          ),
+
+            const SizedBox(height: 20),
+
+            // actions
+            Row(children: [
+              if (!done) ...[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() {}),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(done ? Icons.check : Icons.close),
+                  label: Text(done ? 'Done' : 'Close'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: done ? cs.primary : cs.primary,
+                    foregroundColor: cs.onPrimary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ]),
+          ]),
         );
       },
     );
+  }
+
+  Widget _detailRow(String label, String value, Color valueColor) {
+    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: valueColor)),
+    ]);
+  }
+
+  String _formatTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    return '${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2,'0')}';
   }
 }
