@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "58311186110",
+    "project_id": "finity-db2d9",
+    "storage_bucket": "finity-db2d9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:58311186110:android:7a260755affea29eedb0ef",
+        "android_client_info": {
+          "package_name": "com.example.finity_2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzL-6vcYiq-Z_wqiIpREH0pKFoeHuTgFo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
