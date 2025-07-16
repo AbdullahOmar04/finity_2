@@ -6,8 +6,10 @@ import 'package:finity_2/utlis/logo_mapper.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -25,6 +27,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   List<BudgetItem> _fixedExpenses = [];
   List<VariableExpense> _variableExpenses = [];
 
+  List<String> _smartTips = [];
+  bool _isGeneratingTips = false;
+  String _tipsError = '';
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +43,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     if (_uid == null) return;
     final doc = FirebaseFirestore.instance.collection('users').doc(_uid);
     final snap = await doc.get();
+    if (!mounted) return;
     final data = snap.data() ?? {};
 
     final incomesData = (data['incomes'] as List<dynamic>?) ?? [];
@@ -60,6 +67,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
               .map(VariableExpense.fromMap)
               .toList();
     });
+    _generateSmartTips();
   }
 
   Future<void> _saveBudget() async {
@@ -70,6 +78,88 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       'fixedExpenses': _fixedExpenses.map((e) => e.toMap()).toList(),
       'variableExpenses': _variableExpenses.map((v) => v.toMap()).toList(),
     });
+    _generateSmartTips();
+  }
+
+  Future<void> _generateSmartTips() async {
+    // Prevent API calls if there's no data
+    if (_incomes.isEmpty &&
+        _fixedExpenses.isEmpty &&
+        _variableExpenses.isEmpty) {
+      setState(() {
+        _smartTips = [
+          "Add income and expenses to receive personalized tips! ✨",
+        ];
+      });
+      return;
+    }
+
+    setState(() {
+      _isGeneratingTips = true;
+      _tipsError = '';
+      _smartTips = []; // Clear old tips
+    });
+
+    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    if (apiKey.isEmpty) {
+      setState(() {
+        _tipsError = 'Error: API Key is not configured.';
+        _isGeneratingTips = false;
+      });
+      return;
+    }
+
+    final model = GenerativeModel(
+      model: 'gemini-1.5-flash-latest',
+      apiKey: apiKey,
+    );
+
+    final totalIncome = _incomes.fold(0.0, (s, i) => s + i.amount);
+    final totalFixed = _fixedExpenses.fold(0.0, (s, e) => s + e.amount);
+    final totalVariable = _variableExpenses.fold(0.0, (s, v) => s + v.amount);
+    final savings = totalIncome - totalFixed - totalVariable;
+
+    final prompt = """
+    You are a friendly and encouraging financial assistant for a mobile app called Finity.
+    Analyze the following monthly budget data for a user in Jordan (currency is JOD).
+
+    - Total Monthly Income: ${totalIncome.toStringAsFixed(2)} JOD
+    - Total Fixed Expenses: ${totalFixed.toStringAsFixed(2)} JOD
+    - Total Variable Expenses: ${totalVariable.toStringAsFixed(2)} JOD
+    - Monthly Savings: ${savings.toStringAsFixed(2)} JOD
+
+    Based on this data, provide 3 short, actionable, and encouraging financial tips. Use emojis.
+    Each tip must be on a new line. Do not include any other text, titles, or introductions.
+    For example:
+    💡 Your savings rate is looking great! Keep it up.
+    Consider creating a small emergency fund. 🏦
+    Review your 'Dining Out' expenses to save more. 🍔
+    """;
+
+    try {
+      final content = [Content.text(prompt)];
+      final response = await model.generateContent(content);
+
+      final generatedTips =
+          response.text
+              ?.split('\n')
+              .where((tip) => tip.trim().isNotEmpty) // Filter out empty lines
+              .toList() ??
+          [];
+
+      setState(() {
+        _smartTips = generatedTips;
+      });
+    } catch (e) {
+      setState(() {
+        _tipsError = 'Could not generate tips. Please try again later.';
+        print('Gemini API Error: $e');
+      });
+    } finally {
+      setState(() {
+        _isGeneratingTips = false;
+      });
+    }
   }
 
   // Enhanced dialog with blue theme
@@ -815,10 +905,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                           colors: [
                             Theme.of(
                               context,
-                            ).colorScheme.primary.withOpacity(0.1),
+                            ).colorScheme.primary.withOpacity(0.05),
                             Theme.of(
                               context,
-                            ).colorScheme.surface.withOpacity(0.1),
+                            ).colorScheme.surface.withOpacity(0.05),
                           ],
                         ),
                       ),
@@ -827,43 +917,41 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.lightbulb, color: Colors.orange),
+                              Icon(
+                                Icons.lightbulb_outline,
+                                color: Colors.orangeAccent,
+                              ),
                               SizedBox(width: 8),
                               Text(
-                                'Financial Tips',
+                                'Smart Financial Tips',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
-                                  color:
-                                      Theme.of(context).colorScheme.onTertiary,
+                                  color: Theme.of(context).colorScheme.tertiary,
                                 ),
                               ),
                             ],
                           ),
                           SizedBox(height: 16),
-                          if (savingsRate < 20)
-                            _buildTipItem(
-                              '💰 Aim to save at least 20% of your income.',
-                              Colors.red,
-                            ),
-                          if (totalFixed / (totalIncome > 0 ? totalIncome : 1) >
-                              0.6)
-                            _buildTipItem(
-                              '🏠 Consider reducing fixed costs.',
-                              Colors.orange,
-                            ),
-                          if (totalVariable /
-                                  (totalIncome > 0 ? totalIncome : 1) >
-                              0.2)
-                            _buildTipItem(
-                              '🛒 Cut discretionary spending by 20%.',
-                              Colors.blue,
-                            ),
-                          if (savingsRate >= 20)
-                            _buildTipItem(
-                              '✅ Great job! You\'re saving well.',
-                              Colors.green,
-                            ),
+  
+                          if (_isGeneratingTips)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          else if (_tipsError.isNotEmpty)
+                            _buildTipItem(_tipsError, Colors.red)
+                          else
+                            ..._smartTips
+                                .map(
+                                  (tip) => _buildTipItem(
+                                    tip,
+                                    Theme.of(context).colorScheme.primary,
+                                  ),
+                                )
+                                .toList(),
                         ],
                       ),
                     ),

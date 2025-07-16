@@ -87,11 +87,11 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
     setState(() => _loading = true);
 
     final merchant = _merchantCtl.text.trim();
-    final logoUrl  = _logoCtl.text.trim().isEmpty ? null : _logoCtl.text.trim();
-    final amount   = double.parse(_amountCtl.text.trim());
-    final cycle    = _selectedCycle!.toLowerCase();
-    final nextTs   = Timestamp.fromDate(_nextDate!);
-    final uid      = FirebaseAuth.instance.currentUser!.uid;
+    final logoUrl = _logoCtl.text.trim().isEmpty ? null : _logoCtl.text.trim();
+    final amount = double.parse(_amountCtl.text.trim());
+    final cycle = _selectedCycle!.toLowerCase();
+    final nextTs = Timestamp.fromDate(_nextDate!);
+    final uid   = FirebaseAuth.instance.currentUser!.uid;
 
     // Keep same subId if editing, else generate new:
     final subId = widget.existing != null

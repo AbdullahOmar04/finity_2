@@ -25,6 +25,9 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
   bool _processing = false;
   bool _alreadyPaid = false;
 
+  List<Map<String, dynamic>> _cards = [];
+  String? _selectedCardId;
+
   @override
   void initState() {
     super.initState();
@@ -56,8 +59,8 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
       }
 
       final data = doc.data() as Map<String, dynamic>;
-      final expiresAt = data['expiresAt'] as Timestamp?;
-      if (expiresAt != null && expiresAt.toDate().isBefore(DateTime.now())) {
+      final expiresAt = (data['expiresAt'] as Timestamp?)?.toDate();
+      if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
         setState(() {
           _error = 'This bill has expired';
           _loading = false;
@@ -74,16 +77,37 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
       }
 
       final user = FirebaseAuth.instance.currentUser;
+      bool alreadyPaid = false;
+      List<Map<String, dynamic>> cardsList = [];
+      String? defaultCardId;
+
       if (user != null) {
         final paidBy = List<String>.from(data['paidBy'] ?? []);
-        if (paidBy.contains(user.uid)) {
-          setState(() => _alreadyPaid = true);
+        alreadyPaid = paidBy.contains(user.uid);
+
+        if (!alreadyPaid) {
+          // load user's cards
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+          final userData = userDoc.data() ?? {};
+          final raw = List<dynamic>.from(userData['cards'] ?? []);
+          cardsList = raw
+              .whereType<Map<String, dynamic>>()
+              .toList();
+          if (cardsList.isNotEmpty) {
+            defaultCardId = cardsList.first['cardId'] as String?;
+          }
         }
       }
 
       setState(() {
         _billData = data;
         _billSnapshot = doc;
+        _alreadyPaid = alreadyPaid;
+        _cards = cardsList;
+        _selectedCardId = defaultCardId;
         _loading = false;
       });
     } catch (e) {
@@ -95,7 +119,9 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
   }
 
   Future<void> _processPayment() async {
-    if (_billData == null || _billSnapshot == null) return;
+    if (_billData == null ||
+        _billSnapshot == null ||
+        _selectedCardId == null) return;
     setState(() => _processing = true);
 
     try {
@@ -133,6 +159,7 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
             'amountCents': data['amountPerPersonCents'],
             'status': 'completed',
             'paymentMethod': 'card',
+            'cardId': _selectedCardId,
             'createdAt': FieldValue.serverTimestamp(),
           },
         );
@@ -174,8 +201,8 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
+              Navigator.of(context).pop(); // close dialog
+              Navigator.of(context).pop(); // go back to scanning
             },
             child: const Text('Done'),
           ),
@@ -279,6 +306,7 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Bill Summary
               Card(
                 elevation: 2,
                 child: Padding(
@@ -298,48 +326,78 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
                       _summaryRow('Split Between:', '$people people'),
                       _summaryRow('Already Paid:', '$paid/$people'),
                       const Divider(height: 20),
-                      _summaryRow('Your Share:', '${amountPer.toStringAsFixed(2)} JD',
-                          isHighlighted: true),
+                      _summaryRow(
+                        'Your Share:',
+                        '${amountPer.toStringAsFixed(2)} JD',
+                        isHighlighted: true,
+                      ),
                     ],
                   ),
                 ),
               ),
+
               const SizedBox(height: 24),
+
+              // Card selector
               Card(
                 elevation: 2,
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Payment Method',
+                        'Pay with:',
                         style: Theme.of(context)
                             .textTheme
                             .titleMedium
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 16),
-                      _methodTile(
-                        icon: Icons.credit_card,
-                        title: 'Credit/Debit Card',
-                        subtitle: 'Visa, Mastercard, etc.',
-                        isSelected: true,
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: _selectedCardId,
+                        items: _cards.map((c) {
+                          final issuer = c['issuer'] as String? ?? '';
+                          final last4 = c['last4'] as String? ?? '';
+                          return DropdownMenuItem(
+                            value: c['cardId'] as String,
+                            child: Text('$issuer •••• $last4'),
+                          );
+                        }).toList(),
+                        onChanged: (val) => setState(() => _selectedCardId = val),
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                        ),
+                        validator: (v) => v == null ? 'Select a card' : null,
                       ),
                     ],
                   ),
                 ),
               ),
+
               const Spacer(),
+
+              // Progress
               LinearProgressIndicator(value: paid / people),
               const SizedBox(height: 8),
               Text('$paid of $people people have paid',
                   textAlign: TextAlign.center),
               const SizedBox(height: 24),
+
+              // Pay button
               SizedBox(
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _processing ? null : _processPayment,
+                  onPressed:
+                      (_processing || _selectedCardId == null) ? null : _processPayment,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
                   child: _processing
                       ? Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -348,10 +406,9 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(Colors.white)),
                             ),
                             SizedBox(width: 12),
                             Text('Processing...',
@@ -385,54 +442,6 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
                   color: isHighlighted
                       ? Theme.of(context).colorScheme.primary
                       : null)),
-        ],
-      ),
-    );
-  }
-
-  Widget _methodTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool isSelected,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.outline),
-        borderRadius: BorderRadius.circular(8),
-        color:
-            isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
-      ),
-      child: Row(
-        children: [
-          Icon(icon,
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w500)),
-                Text(subtitle,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          if (isSelected)
-            Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
         ],
       ),
     );
