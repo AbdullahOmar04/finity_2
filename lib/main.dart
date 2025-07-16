@@ -44,6 +44,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _tryAuthenticate() async {
+    if (!mounted) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       // not signed in at all, skip biometrics

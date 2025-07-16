@@ -35,6 +35,7 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
   }
 
   Future<void> _loadBillData() async {
+    if (!mounted) return;
     try {
       final qrJson = jsonDecode(widget.qrData);
       if (qrJson['type'] != 'bill_split') {
@@ -119,6 +120,7 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
   }
 
   Future<void> _processPayment() async {
+    if (!mounted) return;
     if (_billData == null ||
         _billSnapshot == null ||
         _selectedCardId == null) return;
@@ -132,6 +134,7 @@ class _CustomerPaymentScreenState extends State<CustomerPaymentScreen> {
       await Future.delayed(const Duration(seconds: 2));
 
       await FirebaseFirestore.instance.runTransaction((tx) async {
+        if (!mounted) return;
         final fresh = await tx.get(_billSnapshot!.reference);
         final data = fresh.data() as Map<String, dynamic>;
         final paidBy = List<String>.from(data['paidBy'] ?? []);

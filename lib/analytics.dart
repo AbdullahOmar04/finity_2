@@ -40,6 +40,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _loadBudget() async {
+    if (!mounted) return;
     if (_uid == null) return;
     final doc = FirebaseFirestore.instance.collection('users').doc(_uid);
     final snap = await doc.get();
@@ -73,6 +74,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Future<void> _saveBudget() async {
     if (_uid == null) return;
     final doc = FirebaseFirestore.instance.collection('users').doc(_uid);
+    if (!mounted) return;
     await doc.update({
       'incomes': _incomes.map((i) => i.toMap()).toList(),
       'fixedExpenses': _fixedExpenses.map((e) => e.toMap()).toList(),
@@ -83,9 +85,12 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
   Future<void> _generateSmartTips() async {
     // Prevent API calls if there's no data
+    if (!mounted) return;
+
     if (_incomes.isEmpty &&
         _fixedExpenses.isEmpty &&
         _variableExpenses.isEmpty) {
+      if (!mounted) return;
       setState(() {
         _smartTips = [
           "Add income and expenses to receive personalized tips! ✨",
@@ -93,19 +98,22 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       });
       return;
     }
-
-    setState(() {
-      _isGeneratingTips = true;
-      _tipsError = '';
-      _smartTips = []; // Clear old tips
-    });
+    if (mounted) {
+      setState(() {
+        _isGeneratingTips = true;
+        _tipsError = '';
+        _smartTips = []; // Clear old tips
+      });
+    }
 
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
     if (apiKey.isEmpty) {
-      setState(() {
-        _tipsError = 'Error: API Key is not configured.';
-        _isGeneratingTips = false;
-      });
+      if (mounted) {
+        setState(() {
+          _tipsError = 'Error: API Key is not configured.';
+          _isGeneratingTips = false;
+        });
+      }
       return;
     }
 
@@ -147,15 +155,18 @@ class _AnalyticsPageState extends State<AnalyticsPage>
               .toList() ??
           [];
 
+      if (!mounted) return;
       setState(() {
         _smartTips = generatedTips;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _tipsError = 'Could not generate tips. Please try again later.';
         print('Gemini API Error: $e');
       });
     } finally {
+      if (!mounted) return;
       setState(() {
         _isGeneratingTips = false;
       });
@@ -274,6 +285,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
   // Income functions
   Future<void> _addIncome() async {
+    if (!mounted) return;
     final result = await _showBudgetItemDialog(title: 'Add Income');
     if (result != null) {
       setState(() => _incomes.add(result));
@@ -282,6 +294,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _editIncome(int index) async {
+    if (!mounted) return;
     final orig = _incomes[index];
     final result = await _showBudgetItemDialog(
       title: 'Edit Income',
@@ -294,6 +307,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _removeIncome(int index) async {
+    if (!mounted) return;
     final toRemove = _incomes[index];
     final ok = await _showConfirmDialog(
       'Delete Income?',
@@ -307,6 +321,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
   // Fixed expense functions
   Future<void> _addFixedExpense() async {
+    if (!mounted) return;
     final result = await _showBudgetItemDialog(title: 'Add Fixed Expense');
     if (result != null) {
       setState(() => _fixedExpenses.add(result));
@@ -315,6 +330,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _editFixedExpense(int index) async {
+    if (!mounted) return;
     final orig = _fixedExpenses[index];
     final result = await _showBudgetItemDialog(
       title: 'Edit Fixed Expense',
@@ -327,6 +343,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _removeFixedExpense(int index) async {
+    if (!mounted) return;
     final toRem = _fixedExpenses[index];
     final ok = await _showConfirmDialog(
       'Delete Fixed Expense?',
@@ -450,6 +467,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                               color: Theme.of(context).colorScheme.primary,
                             ),
                             onPressed: () async {
+                              if (!mounted) return;
                               final picked = await showDatePicker(
                                 context: ctx,
                                 initialDate: date,
@@ -502,6 +520,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
   // Variable expense functions
   Future<void> _addVariableExpense() async {
+    if (!mounted) return;
     final result = await _showVariableDialog();
     if (result != null) {
       setState(() => _variableExpenses.add(result));
@@ -510,6 +529,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _editVariableExpense(int index) async {
+    if (!mounted) return;
     final orig = _variableExpenses[index];
     final result = await _showVariableDialog(initial: orig);
     if (result != null) {
@@ -519,6 +539,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _removeVariableExpense(int index) async {
+    if (!mounted) return;
     final toRem = _variableExpenses[index];
     final ok = await _showConfirmDialog(
       'Delete Expense?',
@@ -933,7 +954,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                             ],
                           ),
                           SizedBox(height: 16),
-  
+
                           if (_isGeneratingTips)
                             const Center(
                               child: Padding(

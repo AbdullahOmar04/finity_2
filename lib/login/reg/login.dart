@@ -33,6 +33,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _login() async {
+    if (!mounted) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
@@ -71,6 +72,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _tryBiometric() async {
+    if (!mounted) return;
     try {
       final canCheck = await _localAuth.canCheckBiometrics;
       if (!canCheck) {

@@ -30,6 +30,7 @@ class _QrSendingState extends State<QrSending> {
   }
 
   Future<void> _createBillSplit() async {
+    if (!mounted) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 

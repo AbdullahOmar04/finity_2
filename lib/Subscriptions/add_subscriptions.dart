@@ -65,6 +65,7 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
   }
 
   Future<void> _pickDate() async {
+    if (!mounted) return;
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
@@ -76,6 +77,7 @@ class _AddSubscriptionPageState extends State<AddSubscriptionPage> {
   }
 
   Future<void> _submit() async {
+    if (!mounted) return;
     if (!_formKey.currentState!.validate()) return;
     if (_nextDate == null || _selectedCardId == null) {
       ScaffoldMessenger.of(context).showSnackBar(

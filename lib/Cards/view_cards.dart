@@ -61,6 +61,7 @@ class _ViewCardsPageState extends State<ViewCardsPage> {
   }
 
   Future<void> _removeCard(Map<String, dynamic> card) async {
+    if (!mounted) return;
     final last4 = card['last4'] as String? ?? '';
     final ok = await _confirmRemoval(last4);
     if (ok != true) return;

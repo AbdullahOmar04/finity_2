@@ -29,6 +29,7 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _submit() async {
+    if (!mounted) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _loading = true);

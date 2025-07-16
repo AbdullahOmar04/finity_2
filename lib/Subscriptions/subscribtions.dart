@@ -1,3 +1,5 @@
+// lib/view_subscriptions_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:finity_2/utlis/logo_mapper.dart';
@@ -23,6 +25,7 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
   }
 
   Future<void> _cancelSubscription(Map<String, dynamic> sub) async {
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder:
@@ -59,6 +62,7 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
   }
 
   Future<void> _resubscribeSubscription(Map<String, dynamic> sub) async {
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder:
@@ -93,6 +97,7 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
   }
 
   Future<void> _removeSubscription(Map<String, dynamic> sub) async {
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder:
@@ -141,8 +146,8 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
         title: Text(
           'Your Subscriptions',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onPrimary,
             fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onPrimary,
           ),
         ),
         centerTitle: true,
@@ -182,34 +187,69 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
                 (data['subscriptions'] as List<dynamic>?)
                     ?.cast<Map<String, dynamic>>() ??
                 [];
+
+            // Empty state
+            if (subs.isEmpty) {
+              return Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.subscriptions,
+                            size: 64,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withOpacity(0.5),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No subscriptions yet.\nAdd one to get started!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.add_circle),
+                        label: const Text('Add Subscription'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          foregroundColor:
+                              Theme.of(context).colorScheme.onPrimary,
+                          minimumSize: const Size.fromHeight(56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        onPressed:
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AddSubscriptionPage(),
+                              ),
+                            ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            // Non-empty list
             final cards =
                 (data['cards'] as List<dynamic>?)
                     ?.cast<Map<String, dynamic>>() ??
                 [];
-
-            if (subs.isEmpty) {
-              return Center(
-                child: TextButton.icon(
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Subscription'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AddSubscriptionPage(),
-                        ),
-                      ),
-                ),
-              );
-            }
-
             return ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: subs.length + 1,
@@ -219,18 +259,15 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
                   return SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      icon: const Icon(
-                        Icons.add_circle_outlined,
-                        color: Colors.white,
-                      ),
-                      label: const Text(
-                        'Add Subscription',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                      icon: const Icon(Icons.add_circle_outlined),
+                      label: const Text('Add Subscription'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onPrimary,
+                        minimumSize: const Size.fromHeight(56),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                       onPressed:
@@ -258,7 +295,6 @@ class _ViewSubscriptionsPageState extends State<ViewSubscriptionsPage> {
                   orElse: () => {},
                 );
                 final last4 = card['last4'] as String? ?? '----';
-
                 final subtitle =
                     status == 'active'
                         ? '•••• $last4  •  Next: ${nextDate != null ? DateFormat.yMMMd().format(nextDate) : '—'}'

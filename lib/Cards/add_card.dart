@@ -43,6 +43,7 @@ class _AddCardPageState extends State<AddCardPage> {
   }
 
   Future<void> _submit() async {
+    if (!mounted) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _loading = true);
 

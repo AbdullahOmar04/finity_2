@@ -34,6 +34,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   Future<void> _logout() async {
+    if (!mounted) return;
     await FirebaseAuth.instance.signOut();
     // send them back to LoginPage
     Navigator.pushReplacement(
